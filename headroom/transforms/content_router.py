@@ -656,9 +656,11 @@ class ContentRouterConfig:
     min_ratio_aggressive: float = 0.65  # when context is nearly full
 
     # CCR (Compress-Cache-Retrieve) settings for SmartCrusher
-    ccr_enabled: bool = True  # Enable CCR marker injection for reversible compression
+    ccr_enabled: bool = True  # Enable CCR cache + retrieval markers
     ccr_inject_marker: bool = True  # Add retrieval markers to compressed content
+    smart_crusher_min_tokens_to_crush: int | None = None
     smart_crusher_max_items_after_crush: int | None = None
+    smart_crusher_default_bias: float = 1.0
     smart_crusher_with_compaction: bool = True
 
     # Tag protection: preserve custom/workflow XML tags from text compression.
@@ -1779,6 +1781,10 @@ class ContentRouter(Transform):
                     crusher_config.max_items_after_crush = (
                         self.config.smart_crusher_max_items_after_crush
                     )
+                if self.config.smart_crusher_min_tokens_to_crush is not None:
+                    crusher_config.min_tokens_to_crush = (
+                        self.config.smart_crusher_min_tokens_to_crush
+                    )
                 self._smart_crusher = SmartCrusher(
                     config=crusher_config,
                     ccr_config=ccr_config,
@@ -2307,6 +2313,9 @@ class ContentRouter(Transform):
         tokens_before = sum(tokenizer.count_text(str(m.get("content", ""))) for m in messages)
         context = kwargs.get("context", "")
         hook_biases: dict[int, float] = kwargs.get("biases") or {}
+        default_bias = float(
+            kwargs.get("smart_crusher_bias", self.config.smart_crusher_default_bias) or 1.0
+        )
 
         # Build tool name map for exclusion checking
         tool_name_map = self._build_tool_name_map(messages)
@@ -2476,7 +2485,7 @@ class ContentRouter(Transform):
 
             role = message.get("role", "")
             content = message.get("content", "")
-            bias = 1.0  # Default bias, may be overridden for tool messages
+            bias = default_bias  # Default bias, may be overridden for tool messages
 
             messages_from_end = num_messages - i
 
@@ -2496,6 +2505,7 @@ class ContentRouter(Transform):
                     messages_from_end=messages_from_end,
                     compressor_timing=compressor_timing,
                     min_chars=min_chars_for_block_compression,
+                    default_bias=default_bias,
                     skip_user=skip_user,
                     skip_system=skip_system,
                     compress_assistant_text_blocks=compress_assistant_text_blocks,
@@ -2527,7 +2537,7 @@ class ContentRouter(Transform):
                     # and CCR provides retrieval if it does)
                 # Look up tool-specific compression bias for OpenAI tool messages
                 tool_name = tool_name_map.get(tool_call_id, "")
-                bias = self._get_tool_bias(tool_name) if tool_name else 1.0
+                bias = default_bias * (self._get_tool_bias(tool_name) if tool_name else 1.0)
 
             # Protection 1: Never compress user messages (unless overridden)
             if skip_user and role == "user":
@@ -2599,8 +2609,8 @@ class ContentRouter(Transform):
                 continue
 
             # Route and compress based on content detection
-            # Merge tool-specific bias with hook-provided bias (multiplicative)
-            msg_bias = bias if role == "tool" else 1.0
+            # Merge default/profile, tool-specific, and hook-provided bias (multiplicative)
+            msg_bias = bias if role == "tool" else default_bias
             if i in hook_biases:
                 msg_bias *= hook_biases[i]
 
@@ -2849,6 +2859,7 @@ class ContentRouter(Transform):
         messages_from_end: int = 0,
         compressor_timing: dict[str, float] | None = None,
         min_chars: int = 500,
+        default_bias: float = 1.0,
         skip_user: bool = True,
         skip_system: bool = True,
         compress_assistant_text_blocks: bool = False,

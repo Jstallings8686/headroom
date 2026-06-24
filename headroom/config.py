@@ -270,9 +270,17 @@ class CompressionProfile:
 
 # Named presets for convenience
 PROFILE_PRESETS: dict[str, CompressionProfile] = {
+    # Default/editing profile: conservative enough for normal coding/editing
+    # workflows, with an explicit max_k matching the proxy's default
+    # max_items_after_crush=50.
+    "default/editing": CompressionProfile(bias=1.0, min_k=3, max_k=50),
+    "editing": CompressionProfile(bias=1.0, min_k=3, max_k=50),
     "conservative": CompressionProfile(bias=1.5, min_k=5),
     "moderate": CompressionProfile(bias=1.0, min_k=3),
     "aggressive": CompressionProfile(bias=0.7, min_k=3),
+    # PowerShell diagnostic listings are usually long JSON/CSV arrays/tables.
+    # Keep a bounded sample while preserving enough rows for diagnosis.
+    "powershell-listing": CompressionProfile(bias=0.8, min_k=3, max_k=30),
 }
 
 # Default per-tool profiles: tools not listed here use moderate (bias=1.0)

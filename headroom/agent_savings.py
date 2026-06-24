@@ -30,6 +30,7 @@ class AgentSavingsProfile:
     protect_analysis_context: bool
     min_tokens_to_compress: int
     max_items_after_crush: int
+    smart_crusher_bias: float
     smart_crusher_with_compaction: bool
     force_kompress: bool
     proxy_mode: str
@@ -53,6 +54,7 @@ class AgentSavingsProfile:
             "HEADROOM_PROTECT_ANALYSIS_CONTEXT": ("1" if self.protect_analysis_context else "0"),
             "HEADROOM_MIN_TOKENS": str(self.min_tokens_to_compress),
             "HEADROOM_MAX_ITEMS": str(self.max_items_after_crush),
+            "HEADROOM_SMART_CRUSHER_BIAS": f"{self.smart_crusher_bias:.2f}",
             "HEADROOM_SMART_CRUSHER_COMPACTION": (
                 "1" if self.smart_crusher_with_compaction else "0"
             ),
@@ -69,6 +71,54 @@ class AgentSavingsProfile:
 
 
 _PROFILES: dict[str, AgentSavingsProfile] = {
+    "default/editing": AgentSavingsProfile(
+        name="default/editing",
+        target_savings=0.50,
+        target_ratio=0.50,
+        compress_user_messages=False,
+        compress_system_messages=False,
+        protect_recent=4,
+        protect_analysis_context=True,
+        min_tokens_to_compress=500,
+        max_items_after_crush=50,
+        smart_crusher_bias=1.0,
+        smart_crusher_with_compaction=True,
+        force_kompress=False,
+        proxy_mode="token",
+        accuracy_guard="strict",
+    ),
+    "editing": AgentSavingsProfile(
+        name="editing",
+        target_savings=0.50,
+        target_ratio=0.50,
+        compress_user_messages=False,
+        compress_system_messages=False,
+        protect_recent=4,
+        protect_analysis_context=True,
+        min_tokens_to_compress=500,
+        max_items_after_crush=50,
+        smart_crusher_bias=1.0,
+        smart_crusher_with_compaction=True,
+        force_kompress=False,
+        proxy_mode="token",
+        accuracy_guard="strict",
+    ),
+    "powershell-listing": AgentSavingsProfile(
+        name="powershell-listing",
+        target_savings=0.75,
+        target_ratio=0.25,
+        compress_user_messages=False,
+        compress_system_messages=False,
+        protect_recent=4,
+        protect_analysis_context=True,
+        min_tokens_to_compress=300,
+        max_items_after_crush=30,
+        smart_crusher_bias=0.8,
+        smart_crusher_with_compaction=True,
+        force_kompress=False,
+        proxy_mode="token",
+        accuracy_guard="strict",
+    ),
     AGENT_90_PROFILE: AgentSavingsProfile(
         name=AGENT_90_PROFILE,
         target_savings=0.90,
@@ -79,6 +129,7 @@ _PROFILES: dict[str, AgentSavingsProfile] = {
         protect_analysis_context=True,
         min_tokens_to_compress=120,
         max_items_after_crush=8,
+        smart_crusher_bias=1.0,
         smart_crusher_with_compaction=False,
         force_kompress=True,
         proxy_mode="token",
@@ -94,6 +145,7 @@ _PROFILES: dict[str, AgentSavingsProfile] = {
         protect_analysis_context=True,
         min_tokens_to_compress=250,
         max_items_after_crush=15,
+        smart_crusher_bias=1.0,
         smart_crusher_with_compaction=True,
         force_kompress=False,
         proxy_mode="token",
@@ -167,6 +219,7 @@ def proxy_pipeline_kwargs(config: object) -> dict[str, object]:
                 "target_ratio": profile.target_ratio,
                 "min_tokens_to_compress": profile.min_tokens_to_compress,
                 "max_items_after_crush": profile.max_items_after_crush,
+                "smart_crusher_bias": profile.smart_crusher_bias,
                 "smart_crusher_with_compaction": profile.smart_crusher_with_compaction,
                 "force_kompress": profile.force_kompress,
                 "read_protection_window": profile.protect_recent,
@@ -199,6 +252,10 @@ def proxy_pipeline_kwargs(config: object) -> dict[str, object]:
     max_items = getattr(config, "max_items_after_crush", None)
     if max_items is not None and (not profile_name or int(max_items) != 50):
         kwargs["max_items_after_crush"] = int(max_items)
+
+    smart_crusher_bias = getattr(config, "smart_crusher_bias", None)
+    if smart_crusher_bias is not None and (not profile_name or float(smart_crusher_bias) != 1.0):
+        kwargs["smart_crusher_bias"] = float(smart_crusher_bias)
 
     smart_crusher_with_compaction = getattr(
         config,

@@ -618,6 +618,13 @@ class HeadroomProxy(
                 int | None,
                 profile_kwargs.get("max_items_after_crush"),
             ),
+            smart_crusher_min_tokens_to_crush=cast(
+                int | None,
+                profile_kwargs.get("min_tokens_to_compress"),
+            ),
+            smart_crusher_default_bias=float(
+                profile_kwargs.get("smart_crusher_bias", config.smart_crusher_bias)
+            ),
             smart_crusher_with_compaction=cast(
                 bool,
                 profile_kwargs.get("smart_crusher_with_compaction", True),
@@ -2077,6 +2084,10 @@ def create_app(config: ProxyConfig | None = None) -> FastAPI:
                     "max_items_after_crush",
                     config.max_items_after_crush,
                 ),
+                "smart_crusher_bias": profile_kwargs.get(
+                    "smart_crusher_bias",
+                    config.smart_crusher_bias,
+                ),
                 "smart_crusher_with_compaction": profile_kwargs.get(
                     "smart_crusher_with_compaction",
                     config.smart_crusher_with_compaction,
@@ -2971,6 +2982,10 @@ def create_app(config: ProxyConfig | None = None) -> FastAPI:
             ),
             "max_items_after_crush": profile_kwargs.get(
                 "max_items_after_crush", config.max_items_after_crush
+            ),
+            "smart_crusher_bias": profile_kwargs.get(
+                "smart_crusher_bias",
+                config.smart_crusher_bias,
             ),
             "smart_crusher_with_compaction": profile_kwargs.get(
                 "smart_crusher_with_compaction",
@@ -3993,10 +4008,12 @@ def _parse_tool_profiles(cli_profiles: list[str]) -> dict[str, Any]:
         if level in PROFILE_PRESETS:
             profiles[tool_name] = PROFILE_PRESETS[level]
         else:
+            valid_profiles = ", ".join(sorted(PROFILE_PRESETS))
             logger.warning(
-                "Unknown profile level '%s' for tool '%s'. Use: conservative, moderate, aggressive",
+                "Unknown profile level '%s' for tool '%s'. Use one of: %s",
                 level,
                 tool_name,
+                valid_profiles,
             )
 
     return profiles

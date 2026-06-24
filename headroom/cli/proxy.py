@@ -837,6 +837,7 @@ def proxy(
         compress_user_messages=_get_env_bool("HEADROOM_COMPRESS_USER_MESSAGES", False),
         min_tokens_to_crush=_get_env_int_optional("HEADROOM_MIN_TOKENS") or 500,
         max_items_after_crush=_get_env_int_optional("HEADROOM_MAX_ITEMS") or 50,
+        smart_crusher_bias=_get_env_float_optional("HEADROOM_SMART_CRUSHER_BIAS") or 1.0,
         exclude_tools=_parse_exclude_tools(None) or None,
         tool_profiles=_parse_tool_profiles([]) or None,
         smart_crusher_with_compaction=_get_env_bool_optional("HEADROOM_SMART_CRUSHER_COMPACTION"),
