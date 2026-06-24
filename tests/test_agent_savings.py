@@ -591,3 +591,89 @@ def test_agent_savings_smoke_fixture_passes_real_gate(tmp_path) -> None:
     assert "codex: 91.0% savings meets 90.0%" in gate_result.output
     assert "cursor: 93.0% savings meets 90.0%" in gate_result.output
     assert "100.0% accuracy meets 90.0%" in gate_result.output
+
+
+def test_powershell_listing_profile_returns_correct_pipeline_kwargs() -> None:
+    """powershell-listing profile applies lower crush threshold, tighter bias, and target ratio."""
+    config = ProxyConfig(savings_profile="powershell-listing")
+
+    kwargs = proxy_pipeline_kwargs(config)
+
+    assert kwargs["min_tokens_to_compress"] == 300
+    assert kwargs["max_items_after_crush"] == 30
+    assert kwargs["smart_crusher_bias"] == 0.8
+    assert kwargs["target_ratio"] == 0.25
+    assert kwargs["compress_user_messages"] is False
+    assert kwargs["compress_system_messages"] is False
+    assert kwargs["force_kompress"] is False
+
+
+def test_proxy_explicit_config_overrides_powershell_listing_profile() -> None:
+    """Explicit config fields should override the profile defaults."""
+    config = ProxyConfig(
+        savings_profile="powershell-listing",
+        min_tokens_to_crush=450,  # Override profile's 300
+        target_ratio=0.40,
+    )
+
+    kwargs = proxy_pipeline_kwargs(config)
+
+    assert kwargs["min_tokens_to_compress"] == 450
+    assert kwargs["target_ratio"] == 0.40
+    assert kwargs["smart_crusher_bias"] == 0.8  # Not overridden, so stays at profile default
+
+
+def test_default_editing_profile_returns_default_tokens_and_bias() -> None:
+    """default/editing profile uses the original conservative defaults."""
+    config = ProxyConfig(savings_profile="default/editing")
+
+    kwargs = proxy_pipeline_kwargs(config)
+
+    assert kwargs["min_tokens_to_compress"] == 500
+    assert kwargs["max_items_after_crush"] == 50
+    assert kwargs["smart_crusher_bias"] == 1.0
+
+
+def test_no_profile_falls_back_to_config_defaults() -> None:
+    """Absence of savings_profile should produce profile-free kwargs from config attrs only."""
+    config = ProxyConfig()
+
+    kwargs = proxy_pipeline_kwargs(config)
+
+    # No profile name means profile keys come from config defaults if available
+    # Config default min_tokens_to_crush=500, smart_crusher_bias=1.0, max_items_after_crush=50
+    assert kwargs.get("min_tokens_to_compress") == 500  # From ProxyConfig default
+    assert kwargs.get("smart_crusher_bias") == 1.0  # From ProxyConfig default
+    assert "target_ratio" not in kwargs  # ProxyConfig default is None, so not set
+
+
+def test_powershell_listing_profile_env_var_proxy_startup() -> None:
+    """Setting HEADROOM_SAVINGS_PROFILE=powershell-listing should seed the proxy config."""
+    captured_config: dict[str, ProxyConfig] = {}
+
+    def mock_run_server(config: ProxyConfig, **kwargs: object) -> None:
+        captured_config["config"] = config
+
+    runner = CliRunner()
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("headroom.proxy.server.run_server", mock_run_server)
+        result = runner.invoke(
+            main,
+            ["proxy"],
+            env={"HEADROOM_SAVINGS_PROFILE": "powershell-listing"},
+            catch_exceptions=False,
+        )
+
+    assert result.exit_code == 0, result.output
+    config = captured_config["config"]
+    assert config.savings_profile == "powershell-listing"
+    kwargs = proxy_pipeline_kwargs(config)
+    assert kwargs["min_tokens_to_compress"] == 300
+    assert kwargs["smart_crusher_bias"] == 0.8
+    assert kwargs["target_ratio"] == 0.25
+
+
+def test_unknown_profile_still_raises_value_error() -> None:
+    """Requesting a non-existent profile should fail with valid options listed."""
+    with pytest.raises(ValueError, match="powershell-listing"):
+        get_agent_savings_profile("does-not-exist-at-all-42")
